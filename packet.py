@@ -3,7 +3,7 @@
 @author  Riccardo Cavallari
 @date    2019.10.03
 
-Radio packet class
+Class to represent a packet with a sequence number and a payload
 """
 
 from scheduler import Scheduler
