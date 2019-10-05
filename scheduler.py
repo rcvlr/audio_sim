@@ -72,7 +72,7 @@ def runEvents():
 		# run the event only if the simulation time has not expired yet
 		if(Scheduler.clockTime <= Scheduler.simDuration):
 			# execute the process with its arguments
-			print('SCHED:	run', e.action, '@', Scheduler.clockTime)
+			#print('SCHED:	run', e.action, '@', Scheduler.clockTime)
 			e.action(*e.args)
 
 			# if the event is periodic, set the new execution time and put it
