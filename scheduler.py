@@ -81,8 +81,7 @@ def runEvents():
 				newExecTime = Scheduler.clockTime + e.period
 				if(newExecTime <= e.stopTime or e.stopTime == -1):
 					newEvent = Event(newExecTime, e.period, e.action, e.args, e.stopTime)
-					Scheduler.eventList.append(newEvent)
-					Scheduler.eventList = sorted(Scheduler.eventList, key=attrgetter('execTime'))
+					addEvent(newEvent)
 		else:
 			# simulation time has expired
 			break

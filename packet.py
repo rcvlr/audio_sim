@@ -9,6 +9,8 @@ Class to represent a packet with a sequence number and a payload
 from scheduler import Scheduler
 from array import array
 
+FLUSH_TIMEOUT_INF = -1
+
 class Packet:
     """ A packet to be transmitted and received """
     sn = 0              # to generate unique incremental sequence number
@@ -18,4 +20,5 @@ class Packet:
         self.seqNum = Packet.sn
         self.birthTime = Scheduler.clockTime
         self.txTime = 0
+        self.txAttemps = 0
         Packet.sn += 1
