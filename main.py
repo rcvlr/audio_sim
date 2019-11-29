@@ -2,33 +2,6 @@
 @file    main.py
 @author  Riccardo Cavallari
 @date    2019.10.01
-
-Simulation of a system composed of
-- a producer of audio packets
-- a lossy medium 
-- a consumer of audio packet
-
-The producer generates packets with period T_in; packets are transmitted to
-on the medium with probability P and with period T_m; consumer reproduces packets
-with period T_out. All three timers are subject to precisioin error and are not
-alligned. 
-
-Goals of the simulation are, evaluate latency and buffer overflow/underflow
-at the consumer. 
-
-Assumption: 
-    - no retransmissions
-    - sine wave 
-    - no channel model, just uniform probability P to correctly receive the 
-    packet
-
-Next steps: 
-    - add retransmissions, 
-    - use real audio from a codec
-    - add asynchronous sampling rate conversion
-    - add channel model
-    - add interference
-    - add GUI for plotting and playing sound
 """
 
 import scheduler
@@ -54,6 +27,7 @@ MAX_TX_CONN_EVENT = int(CONNECTION_EVENT/PACKET_DURATION)
 
 underflowCnt = 0
 overflowCnt = 0
+radioOverflow = 0
 
 # FIFO to hold packet ready to bt tx-ed or retx-ed
 fifoRadio = deque([], RADIO_FIFO_LEN)
@@ -96,14 +70,18 @@ def aclTransportCallback (fifoIn, fifoOut):
     """ Simulate an ACL tranport between a master and a slave. Packets are 
     retransmitted untile they are successfully acknowledged. """
 
-    global fifoRadio
+    global fifoRadio, radioOverflow
 
     # get the packet scheduled for this event
     schedPacket = fifoIn.popleft()
     schedPacket.txAttemps = packet.FLUSH_TIMEOUT_INF
 
+    if fifoRadio.maxlen == len(fifoRadio):
+        radioOverflow += 1
+
     fifoRadio.append(schedPacket)
 
+    # schedule tx slots within a connection event
     for i in range(min(len(fifoRadio), MAX_TX_CONN_EVENT)):
         event = scheduler.Event(scheduler.Scheduler.clockTime + i*PACKET_DURATION, 
                                 0, txCallaback, [fifoRadio, fifoOut])
@@ -200,8 +178,9 @@ def main():
     # end of the simulation
     scheduler.simDone()
 
-    print("Consumer underflow: ", underflowCnt)
-    print("Consumer overflow: ", overflowCnt)
+    print("Consumer underflow:", underflowCnt)
+    print("Consumer overflow:", overflowCnt)
+    print("Radio overflow:", radioOverflow)
 
     wof.close()
 
