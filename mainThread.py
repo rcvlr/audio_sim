@@ -29,11 +29,12 @@ import random
 import wave
 from array import array
 from collections import deque
+from vcd import VCDWriter
 
-PROB_THRESHOLD = 1
+PROB_THRESHOLD = 2
 FRAMES_PER_PACKET = 160         # mono, 10 ms @ 16 kHz sampl. rate
 FRAME_INTERVAL = 10e-3
-TRANSPORT_INTERVAL = FRAME_INTERVAL
+TRANSPORT_INTERVAL = 7.5e-3 #FRAME_INTERVAL
 IN_FIFO_LEN = 10
 OUT_FIFO_LEN = IN_FIFO_LEN
 RADIO_FIFO_LEN = 10
@@ -47,6 +48,12 @@ MAX_TX_CONN_EVENT = int(CONNECTION_EVENT/PACKET_DURATION)
 underflowCnt = 0
 overflowCnt = 0
 radioOverflow = 0
+
+vcdFile = open("out.vcd", "w")
+vcd = VCDWriter(vcdFile, timescale='1 ns')
+consWire = vcd.register_var('libsigrok', 'consumer', 'wire', size=1, ident='!')
+bleWire = vcd.register_var('libsigrok', 'BLE', 'wire', size=1, ident='$')
+start = time.perf_counter_ns()
 
 # FIFO to hold packet ready to bt tx-ed or retx-ed
 fifoRadio = deque([], RADIO_FIFO_LEN)
@@ -87,6 +94,10 @@ def consumerCallback(fifo, file, e):
         try:
             packet = fifo.popleft()
             #print("Consumer", packet.seqNum)
+            
+            # TODO: don't write a file, store payloads in some data structure
+            # and use a paudio callback to retrieve data from that data
+            # structure and reproduce it.
             file.writeframes(packet.payload)
 
         except IndexError:                                  # no packet in the FIFO!
@@ -95,6 +106,12 @@ def consumerCallback(fifo, file, e):
             file.writeframes(bytes(2*FRAMES_PER_PACKET))    # write 0s
             underflowCnt += 1
             print("Output FIFO is empty, consumer underflow!")
+
+        end = time.perf_counter_ns()
+        timestamp = end - start
+        vcd.change(consWire, timestamp, 0)
+        vcd.change(consWire, timestamp + 1000, 1)
+        vcd.change(consWire, timestamp + 2000, 0)
 
         time.sleep(FRAME_INTERVAL)
 
@@ -123,11 +140,17 @@ def aclTransportCallback(fifoIn, fifoOut, e):
         # schedule packet transmission slots for this connection event
         for _ in range(min(len(fifoRadio), MAX_TX_CONN_EVENT)):
             txCallback(fifoRadio, fifoOut)
-            time.sleep(PACKET_DURATION)
+            #time.sleep(PACKET_DURATION)
         
         if e.is_set():
             return
-        
+
+        end = time.perf_counter_ns()
+        timestamp = end - start
+        vcd.change(bleWire, timestamp, 0)
+        vcd.change(bleWire, timestamp + 1000, 1)
+        vcd.change(bleWire, timestamp + 2000, 0)
+
         time.sleep(TRANSPORT_INTERVAL)
 
 
@@ -144,10 +167,10 @@ def txCallback(fifoIn, fifoOut):
             if fifoOut.maxlen == len(fifoOut):
                 overflowCnt += 1
 
-            #print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
+            print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
             fifoOut.append(packet)
         else:
-            #print("Packet", packet.seqNum, "Error")
+            print("Packet", packet.seqNum, "Error")
 
             # decrease txAttempts and put the packet back in the FIFO
             packet.txAttemps -= 1
@@ -193,7 +216,7 @@ def main():
 
     producer.start()
     bluetooth.start()
-    time.sleep(OUT_FIFO_LEN*FRAME_INTERVAL)    # wait until the fifo is full
+    time.sleep((OUT_FIFO_LEN/2)*FRAME_INTERVAL)    # wait until the fifo is full
     consumer.start()
 
     # wait until all threads terminate
@@ -206,6 +229,8 @@ def main():
     print("Radio overflow:", radioOverflow)
 
     wof.close()
+    vcd.close()
+    vcdFile.close()
 
 
 if __name__ == '__main__':
