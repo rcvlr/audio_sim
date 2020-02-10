@@ -22,6 +22,11 @@ Next steps:
     - add GUI for plotting and playing sound
 """
 
+"""
+Impossible to achieve enough accuracy for timers in Windows.
+https://stackoverflow.com/questions/7079864/real-time-operating-via-python
+"""
+
 import threading
 import time
 import packet
@@ -135,7 +140,8 @@ def aclTransportCallback(fifoIn, fifoOut, e):
             fifoRadio.append(schedPacket)
 
         except IndexError:
-            print("Input FIFO is empty!")
+            #print("Input FIFO is empty!")
+            1==1
 
         # schedule packet transmission slots for this connection event
         for _ in range(min(len(fifoRadio), MAX_TX_CONN_EVENT)):
@@ -151,6 +157,9 @@ def aclTransportCallback(fifoIn, fifoOut, e):
         vcd.change(bleWire, timestamp + 1000, 1)
         vcd.change(bleWire, timestamp + 2000, 0)
 
+        # tis sould sleep less tan TRANSPORT_INTERVAL because it needs to 
+        # account for te execution time of te txCallback. Tis is wy we ave
+        # to comment #time.sleep(PACKET_DURATION). 
         time.sleep(TRANSPORT_INTERVAL)
 
 
@@ -167,10 +176,10 @@ def txCallback(fifoIn, fifoOut):
             if fifoOut.maxlen == len(fifoOut):
                 overflowCnt += 1
 
-            print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
+            #print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
             fifoOut.append(packet)
         else:
-            print("Packet", packet.seqNum, "Error")
+            #print("Packet", packet.seqNum, "Error")
 
             # decrease txAttempts and put the packet back in the FIFO
             packet.txAttemps -= 1
