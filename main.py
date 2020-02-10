@@ -10,8 +10,9 @@ import random
 import wave
 from array import array
 from collections import deque
+from vcd import VCDWriter
 
-PROB_THRESHOLD = 0.3
+PROB_THRESHOLD = 1
 FRAMES_PER_PACKET = 160         # mono, 10 ms @ 16 kHz sampl. rate
 FRAME_INTERVAL = 10e-3
 CODEC_INTERVAL = FRAME_INTERVAL
@@ -29,9 +30,25 @@ underflowCnt = 0
 overflowCnt = 0
 radioOverflow = 0
 
+vcdFile = open("out.vcd", "w")
+vcd = VCDWriter(vcdFile, timescale='1 us')
+gpio0 = vcd.register_var('audio_sim', 'producer', 'wire', size=1, ident='!')
+gpio1 = vcd.register_var('audio_sim', 'BLE', 'wire', size=1, ident='$')
+
 # FIFO to hold packet ready to bt tx-ed or retx-ed
 fifoRadio = deque([], RADIO_FIFO_LEN)
 
+def gpio_trace(vcd, gpio):
+    """ Spike a gpio """
+    
+    timestamp = scheduler.Scheduler.clockTime*1e6
+    try:
+        vcd.change(gpio, timestamp, 1)
+        vcd.change(gpio, timestamp + 1, 0)
+    
+    except:
+        vcd.change(gpio, timestamp + 1, 1)
+        vcd.change(gpio, timestamp + 2, 0)
 
 def printTime():
     """ print current time """
@@ -59,6 +76,8 @@ def producerCallback(fifo, wf):
         packet = createPacket(bytes(2*FRAMES_PER_PACKET))
 
     fifo.append(packet)
+    
+    gpio_trace(vcd, gpio0)
 
 
 def isochronousTransportCallback(fifoIn, fifoOut):
@@ -131,6 +150,7 @@ def consumerCallback(fifo, file):
         underflowCnt += 1
         print("Output FIFO is empty!")
 
+    gpio_trace(vcd, gpio1)
 
 def main():
     """ Main function of the simulator """
@@ -183,5 +203,7 @@ def main():
     print("Radio overflow:", radioOverflow)
 
     wof.close()
+    vcd.close()
+    vcdFile.close()
 
 if __name__ == '__main__': main()
