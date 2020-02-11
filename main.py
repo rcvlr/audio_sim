@@ -8,11 +8,12 @@ import scheduler
 import packet
 import random
 import wave
+import gpio
 from array import array
 from collections import deque
 from vcd import VCDWriter
 
-PROB_THRESHOLD = 1
+PROB_THRESHOLD = 0.3
 FRAMES_PER_PACKET = 160         # mono, 10 ms @ 16 kHz sampl. rate
 FRAME_INTERVAL = 10e-3
 CODEC_INTERVAL = FRAME_INTERVAL
@@ -21,9 +22,8 @@ OUT_FIFO_LEN = IN_FIFO_LEN
 RADIO_FIFO_LEN = 10
 
 # packet + ack + 2*Tifs 
-# TODO: use real numbers and dependent on packet len and PHY 
-PACKET_DURATION = 800e-6 + 300e-6
-CONNECTION_EVENT = FRAME_INTERVAL - FRAME_INTERVAL/4
+PACKET_DURATION = 0.564e-3  # subevent duration
+CONNECTION_EVENT = 0.75*FRAME_INTERVAL
 MAX_TX_CONN_EVENT = int(CONNECTION_EVENT/PACKET_DURATION)
 
 underflowCnt = 0
@@ -32,23 +32,14 @@ radioOverflow = 0
 
 vcdFile = open("out.vcd", "w")
 vcd = VCDWriter(vcdFile, timescale='1 us')
-gpio0 = vcd.register_var('audio_sim', 'producer', 'wire', size=1, ident='!')
-gpio1 = vcd.register_var('audio_sim', 'BLE', 'wire', size=1, ident='$')
+
+gpio0 = gpio.Gpio(0, vcd, 'producer', '!')
+gpio1 = gpio.Gpio(0, vcd, 'consumer', '$')
+gpio2 = gpio.Gpio(0, vcd, 'ble', '#')
 
 # FIFO to hold packet ready to bt tx-ed or retx-ed
 fifoRadio = deque([], RADIO_FIFO_LEN)
 
-def gpio_trace(vcd, gpio):
-    """ Spike a gpio """
-    
-    timestamp = scheduler.Scheduler.clockTime*1e6
-    try:
-        vcd.change(gpio, timestamp, 1)
-        vcd.change(gpio, timestamp + 1, 0)
-    
-    except:
-        vcd.change(gpio, timestamp + 1, 1)
-        vcd.change(gpio, timestamp + 2, 0)
 
 def printTime():
     """ print current time """
@@ -77,13 +68,14 @@ def producerCallback(fifo, wf):
 
     fifo.append(packet)
     
-    gpio_trace(vcd, gpio0)
+    gpio0.toggle(scheduler.Scheduler.clockTime*1e6)
 
 
 def isochronousTransportCallback(fifoIn, fifoOut):
     """ Simulate a unicast isochronous channel between a master and a slave """
 
     #TODO
+    
 
 def aclTransportCallback (fifoIn, fifoOut):
     """ Simulate an ACL tranport between a master and a slave. Packets are 
@@ -120,8 +112,10 @@ def txCallaback(fifoIn, fifoOut):
             if fifoOut.maxlen == len(fifoOut):
                 overflowCnt += 1
         
-            print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
             fifoOut.append(packet)
+
+            print("Packet", packet.seqNum, "OK, re-tx", packet.txAttemps)
+            gpio2.toggle(scheduler.Scheduler.clockTime*1e6)
         else:
             print("Packet", packet.seqNum, "Error")
 
@@ -150,7 +144,7 @@ def consumerCallback(fifo, file):
         underflowCnt += 1
         print("Output FIFO is empty!")
 
-    gpio_trace(vcd, gpio1)
+    gpio1.toggle(scheduler.Scheduler.clockTime*1e6)
 
 def main():
     """ Main function of the simulator """
